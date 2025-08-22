@@ -8,6 +8,12 @@ import datetime
 from ksei.client import KSEIClient
 from ksei.utils import FileAuthStore
 
+import logging
+
+logging.basicConfig(
+    level=logging.DEBUG, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
+
 
 async def fetch_and_dump_portfolios(
     username: str,
@@ -63,4 +69,3 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-
