@@ -1,0 +1,59 @@
+import os
+import json
+import asyncio
+from pathlib import Path
+import datetime
+
+from ksei.client import KSEIClient
+from ksei.utils import FileAuthStore
+
+
+async def fetch_and_dump_portfolios(
+    username: str,
+    password: str,
+    auth_path: str = "./auth",
+    write_output: bool = True,
+):
+    auth_store = FileAuthStore(directory=auth_path)
+    client = KSEIClient(auth_store=auth_store, username=username, password=password)
+
+    res = await client.get_all_portfolios_async()
+
+    if res is None:
+        raise AssertionError("get_all_portfolios_async() returned None")
+    if not isinstance(res, (dict, list)):
+        raise AssertionError(f"Unexpected response type: {type(res)}")
+
+    if write_output:
+        current_date = datetime.datetime.now().strftime("%Y-%m-%d")
+        out_file = Path("/home/al/Projects/.data/portfolio") / f"{current_date}_raw_ksei.json"
+        out_file.parent.mkdir(parents=True, exist_ok=True)
+        with out_file.open("w", encoding="utf-8") as f:
+            json.dump(res, f, ensure_ascii=False, indent=2)
+        print(f"Wrote portfolios to: {out_file.resolve()}")
+
+    return res
+
+
+async def main():
+    username = os.getenv("KSEI_USERNAME")
+    password = os.getenv("KSEI_PASSWORD")
+    auth_path = os.getenv("KSEI_AUTH_PATH", "./auth")
+    write_output = os.getenv("KSEI_WRITE_OUTPUT", "1") not in ("0", "false", "False")
+
+    if not username or not password:
+        raise SystemExit(
+            "KSEI_USERNAME and KSEI_PASSWORD environment variables must be set"
+        )
+
+    await fetch_and_dump_portfolios(
+        username=username,
+        password=password,
+        auth_path=auth_path,
+        write_output=write_output,
+    )
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
+
