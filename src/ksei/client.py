@@ -27,6 +27,8 @@ class KSEIClient:
         self.password = password
         self.plain_password = plain_password
         self.ua = UserAgent()
+        self._token = None
+        self._lock = asyncio.Lock()
 
     def _hash_password(self):
         if not self.plain_password:
@@ -46,6 +48,24 @@ class KSEIClient:
 
         data = response.json()
         return data["data"][0]["pass"]
+
+    async def _hash_password_async(self, session):
+        if not self.plain_password:
+            return self.password
+
+        password_sha1 = hashlib.sha1(self.password.encode()).hexdigest()
+        timestamp = int(time.time())
+        param = f"{password_sha1}@@!!@@{timestamp}"
+        encoded_param = base64.b64encode(param.encode()).decode()
+
+        url = f"{self.base_url}/activation/generated?param={quote(encoded_param)}"
+
+        async with session.get(
+            url, headers={"Referer": self.base_referer, "User-Agent": self.ua.random}
+        ) as response:
+            response.raise_for_status()
+            data = await response.json()
+            return data["data"][0]["pass"]
 
     def _login(self):
         hashed_password = self._hash_password()
@@ -75,6 +95,34 @@ class KSEIClient:
 
         return token
 
+    async def _login_async(self, session):
+        hashed_password = await self._hash_password_async(session)
+
+        login_data = {
+            "username": self.username,
+            "password": hashed_password,
+            "id": "1",
+            "appType": "web",
+        }
+
+        async with session.post(
+            f"{self.base_url}/login?lang=id",
+            json=login_data,
+            headers={
+                "Referer": self.base_referer,
+                "User-Agent": self.ua.random,
+                "Content-Type": "application/json",
+            },
+        ) as response:
+            response.raise_for_status()
+            data = await response.json()
+            token = data["validation"]
+
+            if self.auth_store:
+                self.auth_store.set(self.username, token)
+
+            return token
+
     def _get_token(self):
         if not self.auth_store:
             return self._login()
@@ -88,6 +136,31 @@ class KSEIClient:
             return self._login()
 
         return token
+
+    async def _get_token_async(self, session):
+        if self._token:
+            expire_time = get_expire_time(self._token)
+            if expire_time and expire_time > time.time():
+                return self._token
+
+        async with self._lock:
+            if self._token:
+                expire_time = get_expire_time(self._token)
+                if expire_time and expire_time > time.time():
+                    return self._token
+
+            token = None
+            if self.auth_store:
+                token = self.auth_store.get(self.username)
+
+            if token:
+                expire_time = get_expire_time(token)
+                if expire_time and expire_time > time.time():
+                    self._token = token
+                    return token
+
+            self._token = await self._login_async(session)
+            return self._token
 
     def get(self, path):
         token = self._get_token()
@@ -125,7 +198,7 @@ class KSEIClient:
         return self.get("/myaccount/global-identity/")
 
     async def get_async(self, session, path):
-        token = self._get_token()
+        token = await self._get_token_async(session)
 
         async with session.get(
             f"{self.base_url}{path}",
