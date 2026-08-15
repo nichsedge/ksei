@@ -9,7 +9,6 @@ from dotenv import load_dotenv
 
 from ksei.client import KSEIClient
 from ksei.utils import FileAuthStore, mask_secret
-from ksei.exceptions import KSEIError
 
 
 def dump_cmd(args):

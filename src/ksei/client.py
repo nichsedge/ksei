@@ -3,7 +3,6 @@ import hashlib
 import base64
 from urllib.parse import quote
 import jwt
-from fake_useragent import UserAgent
 import asyncio
 import threading
 import httpx
