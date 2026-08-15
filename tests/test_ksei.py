@@ -77,3 +77,14 @@ def test_default_auth_store():
 
 def test_get_expire_time_invalid():
     assert get_expire_time("invalid_token") is None
+
+
+def test_client_custom_user_agent():
+    custom_ua = "CustomUserAgent/1.0"
+    client = KSEIClient(username="test", password="pw", user_agent=custom_ua)
+    assert client.user_agent == custom_ua
+
+    # Default user agent should be a non-empty string
+    client_default = KSEIClient(username="test", password="pw")
+    assert bool(client_default.user_agent)
+

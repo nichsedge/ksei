@@ -33,7 +33,15 @@ def dump_cmd(args):
     auth_store = FileAuthStore(directory=auth_path) if auth_path else None
     client = KSEIClient(username=username, password=password, auth_store=auth_store)
 
-    data = asyncio.run(client.get_all_portfolios_async())
+    try:
+        data = asyncio.run(client.get_all_portfolios_async())
+    except Exception as e:
+        print(f"❌ Error fetching KSEI portfolio data: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    if all(v is None for v in data.values()):
+        print("❌ Error: All portfolio endpoints returned null/empty.", file=sys.stderr)
+        sys.exit(1)
     
     current_date = datetime.datetime.now().strftime("%Y-%m-%d")
     out_dir_path = Path(output_dir)

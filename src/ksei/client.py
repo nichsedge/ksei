@@ -16,6 +16,12 @@ from ksei.utils import mask_secret
 logger = logging.getLogger(__name__)
 
 
+DEFAULT_USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+)
+
+
 def get_expire_time(token: str) -> Optional[int]:
     """
     Get the expiration time from a JWT token.
@@ -47,6 +53,7 @@ class KSEIClient:
         auth_store=None,
         plain_password: bool = True,
         timeout: float = 30.0,
+        user_agent: Optional[str] = None,
     ):
         self.base_url = "https://akses.ksei.co.id/service"
         self.base_referer = "https://akses.ksei.co.id"
@@ -63,7 +70,7 @@ class KSEIClient:
         self.password = password
         self.plain_password = plain_password
         self.timeout = timeout
-        self.ua = UserAgent()
+        self.user_agent = user_agent or DEFAULT_USER_AGENT
 
         self._token: Optional[str] = None
         self._sync_lock = threading.Lock()
@@ -134,7 +141,7 @@ class KSEIClient:
         try:
             response = client.get(
                 url,
-                headers={"Referer": self.base_referer, "User-Agent": self.ua.random},
+                headers={"Referer": self.base_referer, "User-Agent": self.user_agent},
             )
             response.raise_for_status()
             data = response.json()
@@ -162,7 +169,7 @@ class KSEIClient:
         try:
             response = await client.get(
                 url,
-                headers={"Referer": self.base_referer, "User-Agent": self.ua.random},
+                headers={"Referer": self.base_referer, "User-Agent": self.user_agent},
             )
             response.raise_for_status()
             data = response.json()
@@ -195,7 +202,7 @@ class KSEIClient:
         url = f"{self.base_url}/login?lang=id"
         headers = {
             "Referer": self.base_referer,
-            "User-Agent": self.ua.random,
+            "User-Agent": self.user_agent,
             "Content-Type": "application/json",
         }
 
@@ -236,7 +243,7 @@ class KSEIClient:
         url = f"{self.base_url}/login?lang=id"
         headers = {
             "Referer": self.base_referer,
-            "User-Agent": self.ua.random,
+            "User-Agent": self.user_agent,
             "Content-Type": "application/json",
         }
 
@@ -315,7 +322,7 @@ class KSEIClient:
 
         headers = {
             "Referer": self.base_referer,
-            "User-Agent": self.ua.random,
+            "User-Agent": self.user_agent,
             "Authorization": f"Bearer {token}",
         }
 
@@ -332,8 +339,9 @@ class KSEIClient:
         except httpx.HTTPStatusError as e:
             if e.response.status_code == 401:
                 raise KSEIAuthError(f"Unauthorized (401) accessing {path}") from e
+            preview = e.response.text[:120].strip().replace("\n", " ") if e.response.text else ""
             raise KSEIResponseError(
-                f"HTTP {e.response.status_code} error accessing {path}: {e.response.text}"
+                f"HTTP {e.response.status_code} error accessing {path}: {preview}"
             ) from e
         except httpx.RequestError as e:
             raise KSEINetworkError(f"Network error requesting {path}: {e}") from e
@@ -355,7 +363,7 @@ class KSEIClient:
 
         headers = {
             "Referer": self.base_referer,
-            "User-Agent": self.ua.random,
+            "User-Agent": self.user_agent,
             "Authorization": f"Bearer {token}",
         }
 
@@ -372,8 +380,9 @@ class KSEIClient:
         except httpx.HTTPStatusError as e:
             if e.response.status_code == 401:
                 raise KSEIAuthError(f"Unauthorized (401) accessing {path}") from e
+            preview = e.response.text[:120].strip().replace("\n", " ") if e.response.text else ""
             raise KSEIResponseError(
-                f"HTTP {e.response.status_code} error accessing {path}: {e.response.text}"
+                f"HTTP {e.response.status_code} error accessing {path}: {preview}"
             ) from e
         except httpx.RequestError as e:
             raise KSEINetworkError(f"Network error requesting {path}: {e}") from e
@@ -403,7 +412,7 @@ class KSEIClient:
 
     async def get_all_portfolios_async(self) -> Dict[str, Optional[Union[Dict[str, Any], List[Any]]]]:
         """
-        Asynchronously fetch all portfolio types in parallel.
+        Asynchronously fetch all portfolio types with pacing and retries to prevent backend session locking.
         """
         portfolio_types = {
             "cash": "/myportofolio/summary-detail/kas",
@@ -413,22 +422,31 @@ class KSEIClient:
             "other": "/myportofolio/summary-detail/lainnya",
         }
 
-        logger.info("Fetching all portfolio types concurrently")
-        tasks = []
-        for portfolio_type, path in portfolio_types.items():
-            task = asyncio.create_task(self.get_async(path), name=portfolio_type)
-            tasks.append(task)
-
-        results = await asyncio.gather(*tasks, return_exceptions=True)
+        logger.info("Fetching all portfolio types")
+        await self._get_token_async()
 
         portfolio_data: Dict[str, Optional[Union[Dict[str, Any], List[Any]]]] = {}
-        for task, result in zip(tasks, results):
-            portfolio_type = task.get_name()
-            if isinstance(result, Exception):
-                logger.error(f"Error fetching {portfolio_type}: {result}")
-                portfolio_data[portfolio_type] = None
-            else:
-                portfolio_data[portfolio_type] = result
+        errors: Dict[str, str] = {}
+
+        for portfolio_type, path in portfolio_types.items():
+            for attempt in range(3):
+                try:
+                    data = await self.get_async(path)
+                    portfolio_data[portfolio_type] = data
+                    if portfolio_type in errors:
+                        del errors[portfolio_type]
+                    break
+                except Exception as e:
+                    errors[portfolio_type] = str(e)
+                    portfolio_data[portfolio_type] = None
+                    if attempt < 2:
+                        await asyncio.sleep(0.6)
+            await asyncio.sleep(0.3)
+
+        if len(errors) == len(portfolio_types):
+            raise KSEIResponseError(
+                f"Failed to fetch any portfolio data (all endpoints failed): {errors}"
+            )
 
         return portfolio_data
 
