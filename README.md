@@ -1,14 +1,16 @@
-# KSEI MCP
+# KSEI
 
-An **unofficial Model Context Protocol (MCP)** server for accessing your [AKSes KSEI](https://akses.ksei.co.id) (Acuan Kepemilikan Sekuritas Kustodian Sentral Efek Indonesia) portfolio data.
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-This server enables AI assistants to retrieve Indonesian securities portfolio information, including:
+A Python client library and **Model Context Protocol (MCP)** server for accessing your [AKSes KSEI](https://akses.ksei.co.id) (Acuan Kepemilikan Sekuritas Kustodian Sentral Efek Indonesia) portfolio data.
 
-* Cash balances
-* Equity holdings
-* Mutual funds
-* Bonds
-* Other investments
+Retrieve complete Indonesian securities portfolio information:
+* 💵 Cash balances
+* 📈 Equity holdings
+* 📊 Mutual funds
+* 📜 Bonds (Obligasi & SBN)
+* 💼 Other investment instruments
+* 👤 Account identity
 
 ---
 
@@ -16,48 +18,66 @@ This server enables AI assistants to retrieve Indonesian securities portfolio in
 
 * Python 3.11 or higher
 * Valid KSEI account credentials
-* [`uv`](https://docs.astral.sh/uv/getting-started/installation/) installed (recommended for quick execution)
+* [`uv`](https://docs.astral.sh/uv/getting-started/installation/) (recommended for fast package management)
 
 ---
 
-## ⚙️ Installation & Setup
+## ⚙️ Configuration
 
-### 1. Set Environment Variables
-
-Set the following environment variables:
+Set your KSEI credentials via environment variables or a `.env` file:
 
 ```bash
 export KSEI_USERNAME="your_ksei_username"
 export KSEI_PASSWORD="your_ksei_password"
-export KSEI_AUTH_PATH="./data"  # Optional, defaults to "./data" for saving auth tokens
-```
-
-### 2. Run with `uvx` (Recommended)
-
-The easiest way to start the server is with [`uvx`](https://docs.astral.sh/uv/reference/cli/#uvx):
-
-```bash
-# Run directly from PyPI
-uvx ksei-mcp
-
-# Or run from the local directory
-uvx --from . ksei-mcp
-```
-
-### 3. Alternative: Traditional Installation
-
-If you prefer manual installation:
-
-```bash
-# Install dependencies
-pip install -e .
+export KSEI_AUTH_PATH="./data"  # Optional, path to cache auth tokens (defaults to ./data)
 ```
 
 ---
 
-## 🤖 Usage with MCP Clients
+## 🚀 Usage
 
-Add this configuration to your MCP-compatible client:
+### 1. As a Python Library
+
+```python
+import asyncio
+from ksei import KSEIClient, FileAuthStore
+
+# Initialize client
+auth_store = FileAuthStore(directory="./data")
+client = KSEIClient(auth_store=auth_store, username="your_username", password="your_password")
+
+# Synchronous usage
+summary = client.get_portfolio_summary()
+cash = client.get_cash_balances()
+equities = client.get_equity_balances()
+funds = client.get_mutual_fund_balances()
+bonds = client.get_bond_balances()
+
+# Asynchronous usage (fast parallel fetch)
+async def main():
+    all_portfolios = await client.get_all_portfolios_async()
+    print(all_portfolios)
+
+asyncio.run(main())
+```
+
+---
+
+### 2. As an MCP Server (for AI Assistants)
+
+#### Quick Run with `uvx`
+
+```bash
+# Run directly with uvx
+uvx ksei-mcp
+
+# Or run from local checkout
+uvx --from . ksei-mcp
+```
+
+#### MCP Client Configuration
+
+Add this configuration to your MCP client (Claude Desktop, Cursor, Gemini CLI, etc.):
 
 ```json
 {
@@ -65,7 +85,12 @@ Add this configuration to your MCP-compatible client:
     "ksei": {
       "type": "stdio",
       "command": "uvx",
-      "args": ["ksei-mcp@latest"]
+      "args": ["ksei-mcp"],
+      "env": {
+        "KSEI_USERNAME": "your_ksei_username",
+        "KSEI_PASSWORD": "your_ksei_password",
+        "KSEI_AUTH_PATH": "./data"
+      }
     }
   }
 }
@@ -73,71 +98,43 @@ Add this configuration to your MCP-compatible client:
 
 ---
 
-## 🧪 Development: Using MCP Inspector
+### 3. Example Script (Fetch and Dump)
 
-For local testing and development:
+Run the included example script to dump all portfolio holdings to a JSON file:
 
 ```bash
-# Install MCP Inspector
-npm install -g @modelcontextprotocol/inspector
-
-# Run with inspector
-mcp-inspector uvx --from . ksei-mcp
+uv run examples/fetch_and_dump_portfolios.py
 ```
 
 ---
 
-## 💬 Example Queries
+## 🧪 Testing with MCP Inspector
 
-Once integrated into your AI assistant, you can ask:
+For local MCP debugging:
 
+```bash
+npx @modelcontextprotocol/inspector uv run ksei-mcp
 ```
-"Show me my KSEI portfolio summary"
-"What are my current cash balances?"
-"List all my equity holdings"
-"Get my mutual fund investments"
-"Fetch all portfolio data"
-```
-
-### Example (Using Gemini CLI)
-
-![Gemini CLI Example](assets/gemini.png)
-
-Other supported clients include GitHub Copilot, Claude, and any MCP-compatible assistant.
 
 ---
 
-## 🔐 Security Considerations
+## 🔐 Security & Privacy
 
-* **Credentials**: Never commit credentials to version control. Use environment variables or secure vaults.
-* **Token Storage**: Auth tokens are stored locally as JSON files.
-* **Secure Transport**: All communication with KSEI uses HTTPS.
-* **Access Control**: Restrict file system access to the authentication and data directories.
-
----
-
-## 🛠️ Contributing
-
-1. Fork this repository
-2. Create a feature branch
-3. Implement your changes
-4. Add tests (if applicable)
-5. Open a pull request
+* **Credentials**: Never commit credentials to version control. Use `.env` or system environment variables.
+* **Token Caching**: JWT tokens are cached locally as JSON files until expiration to minimize login requests.
+* **Secure Transport**: All requests communicate with official KSEI endpoints via HTTPS.
 
 ---
 
 ## 📄 License
 
-Licensed under the MIT License. See the [LICENSE](./LICENSE) file for details.
+Licensed under the MIT License. See [LICENSE](./LICENSE) for details.
 
 ---
 
 ## ⚠️ Disclaimer
 
-This software is intended for **educational and personal use only**. Users are responsible for complying with KSEI's terms of service and all relevant regulations.
-
-> **Note**: This is an **unofficial client** for KSEI services. It is not affiliated with or endorsed by KSEI.
+This is an **unofficial client** for educational and personal use only. It is not affiliated with or endorsed by PT Kustodian Sentral Efek Indonesia (KSEI).
 
 ### Acknowledgement
-
-This project is an adaptation from [chickenzord/goksei](https://github.com/chickenzord/goksei). Many thanks to the original author for their work and inspiration.
+Adapted and inspired by [chickenzord/goksei](https://github.com/chickenzord/goksei).
