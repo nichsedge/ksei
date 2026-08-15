@@ -1,29 +1,36 @@
-import json
 import os
-import asyncio
-from typing import Any, Dict, List, Optional
+import sys
+import json
+import logging
+from typing import Any, Dict, List, Optional, Union
 from dotenv import load_dotenv
-
-from mcp.server.models import InitializationOptions
-from mcp.server import NotificationOptions, Server
-from mcp.types import (
-    Resource,
-    Tool,
-    TextContent,
-)
+from mcp.server.fastmcp import FastMCP
 
 from ksei.client import KSEIClient
-from ksei.utils import FileAuthStore
+from ksei.utils import FileAuthStore, mask_secret
+from ksei.exceptions import KSEIError, KSEIAuthError
 
 load_dotenv()
 
-# Initialize the MCP server
-server = Server("ksei-server")
+# Route all logs strictly to stderr to prevent stdout JSON-RPC message corruption
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    stream=sys.stderr,
+)
+logger = logging.getLogger("ksei.mcp")
+
+# Initialize FastMCP application
+mcp = FastMCP(
+    name="ksei-server",
+    instructions="MCP server for retrieving Indonesian securities portfolio data from AKSes KSEI.",
+)
 
 _ksei_client: Optional[KSEIClient] = None
 
 
 def get_ksei_client() -> KSEIClient:
+    """Retrieve or initialize the singleton KSEIClient using environment variables."""
     global _ksei_client
     if _ksei_client is not None:
         return _ksei_client
@@ -33,8 +40,8 @@ def get_ksei_client() -> KSEIClient:
     auth_path = os.getenv("KSEI_AUTH_PATH", "./data")
 
     if not username or not password:
-        raise ValueError(
-            "KSEI_USERNAME and KSEI_PASSWORD environment variables must be set"
+        raise KSEIAuthError(
+            "Missing credentials: KSEI_USERNAME and KSEI_PASSWORD environment variables must be configured."
         )
 
     auth_store = FileAuthStore(directory=auth_path)
@@ -42,184 +49,125 @@ def get_ksei_client() -> KSEIClient:
     return _ksei_client
 
 
-@server.list_resources()
-async def handle_list_resources() -> list[Resource]:
-    """List available KSEI resources."""
-    return [
-        Resource(
-            uri="ksei://portfolio/summary",
-            name="Portfolio Summary",
-            description="Overview of all portfolio holdings and balances",
-            mimeType="application/json",
-        ),
-        Resource(
-            uri="ksei://portfolio/cash",
-            name="Cash Balances",
-            description="Detailed cash balances across securities companies",
-            mimeType="application/json",
-        ),
-        Resource(
-            uri="ksei://portfolio/equity",
-            name="Equity Holdings",
-            description="Stock and equity holdings details",
-            mimeType="application/json",
-        ),
-        Resource(
-            uri="ksei://portfolio/mutual-fund",
-            name="Mutual Fund Holdings",
-            description="Mutual fund investment details",
-            mimeType="application/json",
-        ),
-        Resource(
-            uri="ksei://portfolio/bond",
-            name="Bond Holdings",
-            description="Bond and fixed income securities",
-            mimeType="application/json",
-        ),
-        Resource(
-            uri="ksei://portfolio/other",
-            name="Other Holdings",
-            description="Other financial instruments and investments",
-            mimeType="application/json",
-        ),
-        Resource(
-            uri="ksei://account/identity",
-            name="Account Identity",
-            description="Account holder identity and profile information",
-            mimeType="application/json",
-        ),
-    ]
+# ==========================================
+# MCP Tools
+# ==========================================
 
 
-@server.read_resource()
-async def handle_read_resource(uri: str) -> str:
-    """Read a specific KSEI resource."""
-    try:
-        client = get_ksei_client()
-        if uri == "ksei://portfolio/summary":
-            data = client.get_portfolio_summary()
-        elif uri == "ksei://portfolio/cash":
-            data = client.get_cash_balances()
-        elif uri == "ksei://portfolio/equity":
-            data = client.get_equity_balances()
-        elif uri == "ksei://portfolio/mutual-fund":
-            data = client.get_mutual_fund_balances()
-        elif uri == "ksei://portfolio/bond":
-            data = client.get_bond_balances()
-        elif uri == "ksei://portfolio/other":
-            data = client.get_other_balances()
-        elif uri == "ksei://account/identity":
-            data = client.get_global_identity()
-        else:
-            raise ValueError(f"Unknown resource URI: {uri}")
-
-        return json.dumps(data, indent=2, ensure_ascii=False)
-
-    except Exception as e:
-        raise RuntimeError(f"Failed to fetch resource {uri}: {str(e)}")
+@mcp.tool()
+async def get_portfolio_summary() -> Any:
+    """Get high-level summary of all portfolio holdings and balances from AKSes KSEI."""
+    client = get_ksei_client()
+    return client.get_portfolio_summary()
 
 
-@server.list_tools()
-async def handle_list_tools() -> list[Tool]:
-    """List available KSEI tools."""
-    return [
-        Tool(
-            name="get_portfolio_summary",
-            description="Get a summary of all portfolio holdings and balances",
-            inputSchema={"type": "object", "properties": {}, "required": []},
-        ),
-        Tool(
-            name="get_cash_balances",
-            description="Get detailed cash balances across all securities companies",
-            inputSchema={"type": "object", "properties": {}, "required": []},
-        ),
-        Tool(
-            name="get_equity_balances",
-            description="Get detailed equity/stock holdings",
-            inputSchema={"type": "object", "properties": {}, "required": []},
-        ),
-        Tool(
-            name="get_mutual_fund_balances",
-            description="Get mutual fund investment details",
-            inputSchema={"type": "object", "properties": {}, "required": []},
-        ),
-        Tool(
-            name="get_bond_balances",
-            description="Get bond and fixed income securities details",
-            inputSchema={"type": "object", "properties": {}, "required": []},
-        ),
-        Tool(
-            name="get_other_balances",
-            description="Get other financial instruments and investments",
-            inputSchema={"type": "object", "properties": {}, "required": []},
-        ),
-        Tool(
-            name="get_global_identity",
-            description="Get account holder identity and profile information",
-            inputSchema={"type": "object", "properties": {}, "required": []},
-        ),
-        Tool(
-            name="get_all_portfolios",
-            description="Get all portfolio data concurrently (cash, equity, mutual funds, bonds, other)",
-            inputSchema={"type": "object", "properties": {}, "required": []},
-        ),
-    ]
+@mcp.tool()
+async def get_cash_balances() -> Any:
+    """Get detailed cash (Rekening Dana Nasabah / RDN) balances across securities accounts."""
+    client = get_ksei_client()
+    return client.get_cash_balances()
 
 
-@server.call_tool()
-async def handle_call_tool(name: str, arguments: dict | None) -> list[TextContent]:
-    """Handle tool calls for KSEI operations."""
-    try:
-        client = get_ksei_client()
-        if name == "get_portfolio_summary":
-            result = client.get_portfolio_summary()
-        elif name == "get_cash_balances":
-            result = client.get_cash_balances()
-        elif name == "get_equity_balances":
-            result = client.get_equity_balances()
-        elif name == "get_mutual_fund_balances":
-            result = client.get_mutual_fund_balances()
-        elif name == "get_bond_balances":
-            result = client.get_bond_balances()
-        elif name == "get_other_balances":
-            result = client.get_other_balances()
-        elif name == "get_global_identity":
-            result = client.get_global_identity()
-        elif name == "get_all_portfolios":
-            result = await client.get_all_portfolios_async()
-        else:
-            raise ValueError(f"Unknown tool: {name}")
-
-        return [
-            TextContent(
-                type="text", text=json.dumps(result, indent=2, ensure_ascii=False)
-            )
-        ]
-
-    except Exception as e:
-        return [TextContent(type="text", text=f"Error calling tool {name}: {str(e)}")]
+@mcp.tool()
+async def get_equity_balances() -> Any:
+    """Get detailed Indonesian stock holdings (Saham) including shares, market value, and prices."""
+    client = get_ksei_client()
+    return client.get_equity_balances()
 
 
-async def main():
-    from mcp.server.stdio import stdio_server
+@mcp.tool()
+async def get_mutual_fund_balances() -> Any:
+    """Get detailed mutual fund holdings (Reksadana) including unit counts and NAV values."""
+    client = get_ksei_client()
+    return client.get_mutual_fund_balances()
 
-    async with stdio_server() as (read_stream, write_stream):
-        await server.run(
-            read_stream,
-            write_stream,
-            InitializationOptions(
-                server_name="ksei-server",
-                server_version="0.2.0",
-                capabilities=server.get_capabilities(
-                    notification_options=NotificationOptions(),
-                    experimental_capabilities={},
-                ),
-            ),
-        )
+
+@mcp.tool()
+async def get_bond_balances() -> Any:
+    """Get bond and government securities holdings (Obligasi / SBN)."""
+    client = get_ksei_client()
+    return client.get_bond_balances()
+
+
+@mcp.tool()
+async def get_other_balances() -> Any:
+    """Get other financial instruments and investment balances."""
+    client = get_ksei_client()
+    return client.get_other_balances()
+
+
+@mcp.tool()
+async def get_global_identity() -> Any:
+    """Get KSEI account holder identity, SID, and investor profile details."""
+    client = get_ksei_client()
+    return client.get_global_identity()
+
+
+@mcp.tool()
+async def get_all_portfolios() -> Dict[str, Any]:
+    """Fetch all portfolio holdings (cash, equities, mutual funds, bonds, other) in parallel."""
+    client = get_ksei_client()
+    return await client.get_all_portfolios_async()
+
+
+# ==========================================
+# MCP Resources
+# ==========================================
+
+
+@mcp.resource("ksei://portfolio/summary")
+async def resource_portfolio_summary() -> str:
+    """Overview of all portfolio holdings and balances."""
+    client = get_ksei_client()
+    return json.dumps(client.get_portfolio_summary(), indent=2, ensure_ascii=False)
+
+
+@mcp.resource("ksei://portfolio/cash")
+async def resource_cash_balances() -> str:
+    """Detailed cash balances across securities companies."""
+    client = get_ksei_client()
+    return json.dumps(client.get_cash_balances(), indent=2, ensure_ascii=False)
+
+
+@mcp.resource("ksei://portfolio/equity")
+async def resource_equity_balances() -> str:
+    """Stock and equity holdings details."""
+    client = get_ksei_client()
+    return json.dumps(client.get_equity_balances(), indent=2, ensure_ascii=False)
+
+
+@mcp.resource("ksei://portfolio/mutual-fund")
+async def resource_mutual_fund_balances() -> str:
+    """Mutual fund investment details."""
+    client = get_ksei_client()
+    return json.dumps(client.get_mutual_fund_balances(), indent=2, ensure_ascii=False)
+
+
+@mcp.resource("ksei://portfolio/bond")
+async def resource_bond_balances() -> str:
+    """Bond and fixed income securities."""
+    client = get_ksei_client()
+    return json.dumps(client.get_bond_balances(), indent=2, ensure_ascii=False)
+
+
+@mcp.resource("ksei://account/identity")
+async def resource_account_identity() -> str:
+    """Account holder identity and profile information."""
+    client = get_ksei_client()
+    return json.dumps(client.get_global_identity(), indent=2, ensure_ascii=False)
+
+
+# Provide reference to the underlying Server for backward compatibility
+server = mcp._mcp_server
 
 
 def run():
-    asyncio.run(main())
+    """Entry point for running the MCP server with stdio transport."""
+    mcp.run(transport="stdio")
+
+
+def main():
+    run()
 
 
 if __name__ == "__main__":

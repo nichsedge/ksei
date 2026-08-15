@@ -34,6 +34,7 @@ Repository = "https://github.com/nichsedge/ksei.git"
 "Bug Tracker" = "https://github.com/nichsedge/ksei/issues"
 
 [project.scripts]
+ksei = "ksei.cli:main"
 ksei-mcp = "ksei.server:run"
 
 [build-system]
