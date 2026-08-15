@@ -42,15 +42,23 @@ class KSEIClient:
 
     def __init__(
         self,
-        auth_store=None,
         username: str = "",
         password: str = "",
+        auth_store=None,
         plain_password: bool = True,
         timeout: float = 30.0,
     ):
         self.base_url = "https://akses.ksei.co.id/service"
         self.base_referer = "https://akses.ksei.co.id"
-        self.auth_store = auth_store
+
+        if auth_store is False:
+            self.auth_store = None
+        elif auth_store is None:
+            from ksei.utils import FileAuthStore
+            self.auth_store = FileAuthStore()
+        else:
+            self.auth_store = auth_store
+
         self.username = username
         self.password = password
         self.plain_password = plain_password

@@ -61,5 +61,19 @@ def test_client_missing_credentials():
         client._login(client._get_sync_client())
 
 
+def test_default_auth_store():
+    # FileAuthStore() without arguments should default to user cache
+    store = FileAuthStore()
+    assert ".cache" in str(store.directory) or "ksei" in str(store.directory)
+
+    # KSEIClient without auth_store should automatically instantiate FileAuthStore
+    client = KSEIClient(username="test", password="pw")
+    assert isinstance(client.auth_store, FileAuthStore)
+
+    # Disabling cache with auth_store=False
+    client_no_cache = KSEIClient(username="test", password="pw", auth_store=False)
+    assert client_no_cache.auth_store is None
+
+
 def test_get_expire_time_invalid():
     assert get_expire_time("invalid_token") is None

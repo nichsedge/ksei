@@ -37,15 +37,13 @@ def get_ksei_client() -> KSEIClient:
 
     username = os.getenv("KSEI_USERNAME")
     password = os.getenv("KSEI_PASSWORD")
-    auth_path = os.getenv("KSEI_AUTH_PATH", "./data")
 
     if not username or not password:
         raise KSEIAuthError(
             "Missing credentials: KSEI_USERNAME and KSEI_PASSWORD environment variables must be configured."
         )
 
-    auth_store = FileAuthStore(directory=auth_path)
-    _ksei_client = KSEIClient(auth_store=auth_store, username=username, password=password)
+    _ksei_client = KSEIClient(username=username, password=password)
     return _ksei_client
 
 

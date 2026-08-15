@@ -16,7 +16,7 @@ def dump_cmd(args):
     """Fetch and dump portfolio to JSON."""
     username = args.username or os.getenv("KSEI_USERNAME")
     password = args.password or os.getenv("KSEI_PASSWORD")
-    auth_path = args.auth_path or os.getenv("KSEI_AUTH_PATH", "./data")
+    auth_path = args.auth_path or os.getenv("KSEI_AUTH_PATH")
     output_dir = (
         args.output
         or os.getenv("KSEI_OUTPUT_DIR")
@@ -30,8 +30,8 @@ def dump_cmd(args):
         sys.exit(1)
 
     print(f"Fetching KSEI portfolios for {mask_secret(username)}...", file=sys.stderr)
-    auth_store = FileAuthStore(directory=auth_path)
-    client = KSEIClient(auth_store=auth_store, username=username, password=password)
+    auth_store = FileAuthStore(directory=auth_path) if auth_path else None
+    client = KSEIClient(username=username, password=password, auth_store=auth_store)
 
     data = asyncio.run(client.get_all_portfolios_async())
     

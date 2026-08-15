@@ -3,9 +3,29 @@ import os
 import re
 import logging
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Optional, Union
 
 logger = logging.getLogger(__name__)
+
+
+def get_default_auth_path() -> Path:
+    """
+    Get the default directory path for caching authentication tokens.
+    Priority:
+    1. KSEI_AUTH_PATH environment variable (if specified)
+    2. $XDG_CACHE_HOME/ksei (if set)
+    3. ~/.cache/ksei (standard user cache path)
+    """
+    if custom := os.getenv("KSEI_AUTH_PATH"):
+        return Path(custom).expanduser().resolve()
+
+    xdg_cache = os.getenv("XDG_CACHE_HOME")
+    if xdg_cache:
+        base_dir = Path(xdg_cache).expanduser()
+    else:
+        base_dir = Path.home() / ".cache"
+
+    return (base_dir / "ksei").resolve()
 
 
 def mask_secret(secret: Optional[str], show_chars: int = 2) -> str:
@@ -29,14 +49,18 @@ def _sanitize_key(key: str) -> str:
 class FileAuthStore:
     """
     Secure file-based storage for authentication tokens.
+    Defaults to standard user cache directory (~/.cache/ksei) or KSEI_AUTH_PATH if set.
     Enforces restricted filesystem permissions (0o700 for directories, 0o600 for files).
     """
 
-    def __init__(self, directory: str = "./data"):
-        self.directory = Path(directory).resolve()
+    def __init__(self, directory: Optional[Union[str, Path]] = None):
+        if directory is None:
+            self.directory = get_default_auth_path()
+        else:
+            self.directory = Path(directory).expanduser().resolve()
+
         # Create directory with owner-only access (0o700)
         self.directory.mkdir(mode=0o700, parents=True, exist_ok=True)
-        # Ensure permissions in case directory already existed
         try:
             self.directory.chmod(0o700)
         except OSError:

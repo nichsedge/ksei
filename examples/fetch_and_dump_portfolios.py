@@ -22,12 +22,12 @@ logger = logging.getLogger(__name__)
 async def fetch_and_dump_portfolios(
     username: str,
     password: str,
-    auth_path: str = "./auth",
+    auth_path: Optional[str] = None,
     output_dir: str = "./data",
     write_output: bool = True,
 ):
-    auth_store = FileAuthStore(directory=auth_path)
-    client = KSEIClient(auth_store=auth_store, username=username, password=password)
+    auth_store = FileAuthStore(directory=auth_path) if auth_path else None
+    client = KSEIClient(username=username, password=password, auth_store=auth_store)
 
     res = await client.get_all_portfolios_async()
 
@@ -50,7 +50,7 @@ async def fetch_and_dump_portfolios(
 async def main():
     username = os.getenv("KSEI_USERNAME")
     password = os.getenv("KSEI_PASSWORD")
-    auth_path = os.getenv("KSEI_AUTH_PATH", "./auth")
+    auth_path = os.getenv("KSEI_AUTH_PATH")
     output_dir = (
         os.getenv("KSEI_OUTPUT_DIR")
         or os.getenv("PORTFOLIO_DATA_DIR")

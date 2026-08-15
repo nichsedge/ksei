@@ -5,12 +5,12 @@
 A Python client library and **Model Context Protocol (MCP)** server for accessing your [AKSes KSEI](https://akses.ksei.co.id) (Acuan Kepemilikan Sekuritas Kustodian Sentral Efek Indonesia) portfolio data.
 
 Retrieve complete Indonesian securities portfolio information:
-* 💵 Cash balances
-* 📈 Equity holdings
-* 📊 Mutual funds
+* 💵 Cash balances (RDN)
+* 📈 Equity holdings (Saham)
+* 📊 Mutual funds (Reksadana)
 * 📜 Bonds (Obligasi & SBN)
 * 💼 Other investment instruments
-* 👤 Account identity
+* 👤 Account identity & SID
 
 ---
 
@@ -29,7 +29,9 @@ Set your KSEI credentials via environment variables or a `.env` file:
 ```bash
 export KSEI_USERNAME="your_ksei_username"
 export KSEI_PASSWORD="your_ksei_password"
-export KSEI_AUTH_PATH="./data"  # Optional, path to cache auth tokens (defaults to ./data)
+
+# Optional: Override token cache location (defaults automatically to ~/.cache/ksei)
+# export KSEI_AUTH_PATH="/custom/path"
 ```
 
 ---
@@ -38,13 +40,14 @@ export KSEI_AUTH_PATH="./data"  # Optional, path to cache auth tokens (defaults 
 
 ### 1. As a Python Library
 
+Tokens are automatically cached in `~/.cache/ksei` with restricted `0o700`/`0o600` permissions.
+
 ```python
 import asyncio
-from ksei import KSEIClient, FileAuthStore
+from ksei import KSEIClient
 
-# Initialize client
-auth_store = FileAuthStore(directory="./data")
-client = KSEIClient(auth_store=auth_store, username="your_username", password="your_password")
+# Initialize client (no auth_store boilerplate needed!)
+client = KSEIClient(username="your_username", password="your_password")
 
 # Synchronous usage
 summary = client.get_portfolio_summary()
@@ -55,8 +58,9 @@ bonds = client.get_bond_balances()
 
 # Asynchronous usage (fast parallel fetch)
 async def main():
-    all_portfolios = await client.get_all_portfolios_async()
-    print(all_portfolios)
+    async with KSEIClient(username="your_username", password="your_password") as client:
+        all_portfolios = await client.get_all_portfolios_async()
+        print(all_portfolios)
 
 asyncio.run(main())
 ```
@@ -88,8 +92,7 @@ Add this configuration to your MCP client (Claude Desktop, Cursor, Gemini CLI, e
       "args": ["ksei-mcp"],
       "env": {
         "KSEI_USERNAME": "your_ksei_username",
-        "KSEI_PASSWORD": "your_ksei_password",
-        "KSEI_AUTH_PATH": "./data"
+        "KSEI_PASSWORD": "your_ksei_password"
       }
     }
   }
@@ -98,12 +101,14 @@ Add this configuration to your MCP client (Claude Desktop, Cursor, Gemini CLI, e
 
 ---
 
-### 3. Example Script (Fetch and Dump)
-
-Run the included example script to dump all portfolio holdings to a JSON file:
+### 3. CLI Commands
 
 ```bash
-uv run examples/fetch_and_dump_portfolios.py
+# Start MCP server
+uv run ksei mcp
+
+# Fetch and dump raw portfolio JSON
+uv run ksei dump --output ./data
 ```
 
 ---
@@ -120,8 +125,9 @@ npx @modelcontextprotocol/inspector uv run ksei-mcp
 
 ## 🔐 Security & Privacy
 
-* **Credentials**: Never commit credentials to version control. Use `.env` or system environment variables.
-* **Token Caching**: JWT tokens are cached locally as JSON files until expiration to minimize login requests.
+* **Zero Boilerplate Cache**: Tokens are cached automatically in `~/.cache/ksei` (XDG standard) with user-only permissions (`0o700` directory, `0o600` files).
+* **Secret Protection**: Passwords and tokens are never logged or exposed in `__repr__` or unhandled exceptions.
+* **Auto 401 Recovery**: The client transparently refreshes expired tokens on 401 Unauthorized responses.
 * **Secure Transport**: All requests communicate with official KSEI endpoints via HTTPS.
 
 ---
