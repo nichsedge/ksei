@@ -154,9 +154,6 @@ async def resource_account_identity() -> str:
     return json.dumps(client.get_global_identity(), indent=2, ensure_ascii=False)
 
 
-# Provide reference to the underlying Server for backward compatibility
-server = mcp._mcp_server
-
 
 def run():
     """Entry point for running the MCP server with stdio transport."""

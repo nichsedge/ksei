@@ -9,6 +9,7 @@ When testing, developing, or running KSEI:
   ```
 * **User-Agent Handling**: AKSes KSEI WAF enforces strict User-Agent validation. Always use a consistent desktop browser User-Agent (`DEFAULT_USER_AGENT`) and avoid random mobile/outdated user agents.
 * **Request Pacing**: The AKSes KSEI backend experiences session lock errors (HTTP 500) when requests are sent simultaneously without pacing. Keep pacing and retries in batch endpoints.
+* **No Backward Compatibility / Modern Only**: Do not create or maintain backward compatibility shims, legacy module aliases, or deprecated fallbacks. Always target the latest standards and clean, modern implementations.
 * **Unit Tests**: Run tests with `uv run python -m pytest`.
 
 ## Architecture & Entrypoints
