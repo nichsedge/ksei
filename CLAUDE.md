@@ -13,3 +13,11 @@ Use `uv add` to install dependencies:
 ```bash
 uv add package_name
 ```
+
+## Releasing
+Run the release script:
+```bash
+./release.sh        # patch bump (default)
+./release.sh minor  # minor bump
+./release.sh major  # major bump
+```
