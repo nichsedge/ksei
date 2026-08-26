@@ -4,3 +4,5 @@ wheels/
 .env
 data
 .envrc
+
+__pycache__/
